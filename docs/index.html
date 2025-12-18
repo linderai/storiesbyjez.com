@@ -13,8 +13,7 @@
         
         body {
             font-family: 'Courier New', Courier, monospace;
-            height: 100vh;
-            overflow: hidden;
+            min-height: 100vh;
             background: #1a0a0f;
             color: #f0e0e5;
             display: flex;
@@ -367,11 +366,12 @@
         }
     </style>
 </head>
+</head>
 <body class="theme-scarlet">
-    <div class="hex-background">
-        <div class="hex-pattern"></div>
-    </div>
+    <canvas id="wave-canvas" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;"></canvas>
     
+    <div style="position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh;">
+        <div>
     <header class="header">
         <div>
             <h1>storiesbyjez</h1>
@@ -479,140 +479,176 @@
     <footer>
         <p class="powered">powered by <a href="https://lempyra.com">Lempyrλ</a></p>
     </footer>
+        </div>
+    </div>
     
     <script>
-        function generateHexPattern() {
-            const container = document.querySelector('.hex-pattern');
-            container.innerHTML = '';
-            
-            const hexWidth = 40;
-            const hexHeight = 46;
-            const cols = Math.ceil(window.innerWidth / (hexWidth * 0.75)) + 2;
-            const rows = Math.ceil(window.innerHeight / hexHeight) + 2;
+        const canvas = document.getElementById('wave-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        let hexGrid = [];
+        let activeRings = [];
+        let wavePhase1 = 0;
+        let wavePhase2 = Math.PI;
+        
+        const hexSize = 30;
+        const hexHeight = 35;
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            createHexGrid();
+        }
+        
+        function createHexGrid() {
+            hexGrid = [];
+            const cols = Math.ceil(canvas.width / (hexSize * 0.75)) + 2;
+            const rows = Math.ceil(canvas.height / hexHeight) + 2;
             
             for (let row = 0; row < rows; row++) {
                 for (let col = 0; col < cols; col++) {
-                    const hex = document.createElement('div');
-                    hex.className = 'hex';
-                    hex.dataset.col = col;
-                    hex.dataset.row = row;
-                    
-                    const offsetX = col * hexWidth * 0.75;
-                    const offsetY = row * hexHeight + (col % 2) * (hexHeight / 2);
-                    
-                    hex.style.left = offsetX + 'px';
-                    hex.style.top = offsetY + 'px';
-                    
-                    hex.innerHTML = `
-                        <svg viewBox="0 0 40 46">
-                            <polygon points="20,1 38,12 38,34 20,45 2,34 2,12" />
-                        </svg>
-                    `;
-                    
-                    container.appendChild(hex);
+                    const x = col * hexSize * 0.75;
+                    const y = row * hexHeight + (col % 2) * (hexHeight / 2);
+                    hexGrid.push({ x, y, scale: 1, color: '#4a1a2a', brightness: 0 });
                 }
             }
-            
-            startWavePulse();
         }
         
-        function startWavePulse() {
-            const hexes = document.querySelectorAll('.hex');
-            const themeColor = '#ff3344';
-            const baseColor = '#4a1a2a';
+        function drawHex(x, y, scale, color, brightness) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.scale(scale, scale);
             
-            function createWave(startCol, startRow) {
-                hexes.forEach(hex => {
-                    const col = parseInt(hex.dataset.col);
-                    const row = parseInt(hex.dataset.row);
-                    
-                    const distance = Math.sqrt(
-                        Math.pow(col - startCol, 2) + 
-                        Math.pow(row - startRow, 2)
-                    );
-                    
-                    setTimeout(() => {
-                        const polygon = hex.querySelector('polygon');
-                        polygon.style.transition = 'all 0.3s ease-out';
-                        polygon.setAttribute('stroke', themeColor);
-                        polygon.setAttribute('stroke-width', '3');
-                        polygon.setAttribute('fill', themeColor);
-                        polygon.setAttribute('fill-opacity', '0.3');
-                        hex.style.transform = 'scale(1.1)';
-                        hex.style.opacity = '1';
-                        
-                        setTimeout(() => {
-                            polygon.style.transition = 'all 0.5s ease-in';
-                            polygon.setAttribute('stroke', baseColor);
-                            polygon.setAttribute('stroke-width', '1.5');
-                            polygon.setAttribute('fill', 'none');
-                            polygon.setAttribute('fill-opacity', '0');
-                            hex.style.transform = 'scale(1)';
-                            hex.style.opacity = '0.5';
-                        }, 600);
-                    }, distance * 50);
-                });
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3) * i;
+                const hx = Math.cos(angle) * 15;
+                const hy = Math.sin(angle) * 17;
+                i === 0 ? ctx.moveTo(hx, hy) : ctx.lineTo(hx, hy);
             }
+            ctx.closePath();
             
-            document.addEventListener('click', (e) => {
-                const hexWidth = 40;
-                const hexHeight = 46;
-                const clickCol = Math.floor(e.clientX / (hexWidth * 0.75));
-                const clickRow = Math.floor(e.clientY / hexHeight);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1 + brightness * 2;
+            if (brightness > 0.1) {
+                ctx.shadowBlur = 10 * brightness;
+                ctx.shadowColor = color;
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+        
+        function animate() {
+            ctx.fillStyle = '#1a0a0f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            wavePhase1 += 0.03;
+            wavePhase2 += 0.03;
+            
+            const wave1Y = canvas.height * 0.33;
+            const wave2Y = canvas.height * 0.66;
+            
+            hexGrid.forEach(hex => {
+                let inWave = false;
+                let waveIntensity = 0;
                 
-                const colors = ['#ff3344', '#ff5566', '#dd2233', '#ff4455'];
-                const randomColor = colors[Math.floor(Math.random() * colors.length)];
+                // Check wave 1
+                const dist1 = Math.abs(hex.y - wave1Y);
+                if (dist1 < 40) {
+                    const wave = Math.sin(hex.x * 0.02 + wavePhase1);
+                    if (Math.abs(wave * 30 - (hex.y - wave1Y)) < 30) {
+                        inWave = true;
+                        waveIntensity = Math.max(waveIntensity, 1 - dist1 / 40);
+                    }
+                }
                 
-                hexes.forEach(hex => {
-                    const col = parseInt(hex.dataset.col);
-                    const row = parseInt(hex.dataset.row);
-                    
-                    const distance = Math.sqrt(
-                        Math.pow(col - clickCol, 2) + 
-                        Math.pow(row - clickRow, 2)
-                    );
-                    
-                    setTimeout(() => {
-                        const polygon = hex.querySelector('polygon');
-                        polygon.style.transition = 'all 0.3s ease-out';
-                        polygon.setAttribute('stroke', randomColor);
-                        polygon.setAttribute('stroke-width', '3.5');
-                        polygon.setAttribute('fill', randomColor);
-                        polygon.setAttribute('fill-opacity', '0.4');
-                        hex.style.transform = 'scale(1.15)';
-                        hex.style.opacity = '1';
-                        
-                        setTimeout(() => {
-                            polygon.style.transition = 'all 0.5s ease-in';
-                            polygon.setAttribute('stroke', baseColor);
-                            polygon.setAttribute('stroke-width', '1.5');
-                            polygon.setAttribute('fill', 'none');
-                            polygon.setAttribute('fill-opacity', '0');
-                            hex.style.transform = 'scale(1)';
-                            hex.style.opacity = '0.5';
-                        }, 600);
-                    }, distance * 50);
+                // Check wave 2
+                const dist2 = Math.abs(hex.y - wave2Y);
+                if (dist2 < 40) {
+                    const wave = Math.sin(hex.x * 0.02 + wavePhase2);
+                    if (Math.abs(wave * 30 - (hex.y - wave2Y)) < 30) {
+                        inWave = true;
+                        waveIntensity = Math.max(waveIntensity, 1 - dist2 / 40);
+                    }
+                }
+                
+                // Check if cancelled by ring
+                let cancelled = false;
+                activeRings.forEach(ring => {
+                    const dx = hex.x - ring.x;
+                    const dy = hex.y - ring.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (Math.abs(dist - ring.radius) < 40) {
+                        cancelled = true;
+                    }
                 });
+                
+                if (cancelled) {
+                    drawHex(hex.x, hex.y, hex.scale, hex.color, hex.brightness);
+                } else if (inWave) {
+                    drawHex(hex.x, hex.y, 1 + waveIntensity * 0.15, '#ff3344', waveIntensity * 0.5);
+                } else {
+                    drawHex(hex.x, hex.y, 1, '#4a1a2a', 0);
+                }
             });
             
-            function scheduleNextWave() {
-                const interval = 3000 + Math.random() * 4000;
-                setTimeout(() => {
-                    const startCol = Math.floor(Math.random() * 20);
-                    const startRow = Math.floor(Math.random() * 15);
-                    createWave(startCol, startRow);
-                    scheduleNextWave();
-                }, interval);
-            }
+            activeRings = activeRings.filter(ring => {
+                ring.radius += 4;
+                return ring.radius < 300;
+            });
             
-            scheduleNextWave();
-            const startCol = Math.floor(Math.random() * 20);
-            const startRow = Math.floor(Math.random() * 15);
-            createWave(startCol, startRow);
+            requestAnimationFrame(animate);
         }
         
-        window.addEventListener('load', generateHexPattern);
-        window.addEventListener('resize', generateHexPattern);
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            canvas.dispatchEvent(new MouseEvent('click', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            }));
+        });
+        
+        // Listen on document for clicks
+        document.addEventListener('click', (e) => {
+            // Don't create ripple if clicking on links or buttons
+            if (e.target.tagName === 'A' || e.target.tagName === 'BUTTON') {
+                return;
+            }
+            
+            const colors = ['#ff3344', '#ff5566', '#ff1122', '#dd2244'];
+            const ring = { x: e.clientX, y: e.clientY, radius: 0 };
+            activeRings.push(ring);
+            
+            function expandRing() {
+                hexGrid.forEach(hex => {
+                    const dx = hex.x - ring.x;
+                    const dy = hex.y - ring.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (Math.abs(dist - ring.radius) < 40) {
+                        hex.scale = 1.5;
+                        hex.color = colors[Math.floor(Math.random() * colors.length)];
+                        hex.brightness = 1;
+                        
+                        setTimeout(() => {
+                            hex.scale = 1;
+                            hex.color = '#4a1a2a';
+                            hex.brightness = 0;
+                        }, 500);
+                    }
+                });
+                
+                if (ring.radius < 300) {
+                    setTimeout(expandRing, 16);
+                }
+            }
+            expandRing();
+        });
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        animate();
     </script>
 </body>
 </html>
